@@ -76,11 +76,11 @@ func getKafMsgs(kaddr string, h Handler, s Scheduler) error {
 	log.Println("Connecting to kaf: " + kaddr + "...")
 
 	kaddr = kaddr + "get/xx?from="
-	var msgnum uint64 = 1
+	var from uint32 = 1
 	var url strings.Builder
 
 	url.WriteString(kaddr)
-	url.WriteString(strconv.FormatUint(msgnum, 10))
+	url.WriteString(strconv.FormatUint(uint64(from), 10))
 	resp, err := http.Get(url.String())
 	if err != nil {
 		wait := s(0, err)
@@ -91,13 +91,19 @@ func getKafMsgs(kaddr string, h Handler, s Scheduler) error {
 
 	for {
 		if err == nil {
-			process(resp, h)
+      f := process(resp, h)
+      if f > from {
+        from = f
+      }
 		}
-		wait := s(0, err) //TODO
+		wait := s(from, err)
 		if wait == 0 {
 			return err
 		}
 		time.Sleep(wait)
+    url.Reset()
+    url.WriteString(kaddr)
+    url.WriteString(strconv.FormatUint(uint64(from), 10))
 		resp, err = http.Get(url.String())
 	}
 }
@@ -111,7 +117,7 @@ const RecHeaderPfx = "KAF_MSG|"
 /*    way/
  * Read the response header and process all the records
  */
-func process(resp *http.Response, h Handler) {
+func process(resp *http.Response, h Handler) uint32 {
 	in := resp.Body
 	defer in.Close()
 
@@ -119,42 +125,48 @@ func process(resp *http.Response, h Handler) {
 	hdr := make([]byte, len(respHeader))
 	if _, err := io.ReadFull(in, hdr); err != nil {
 		h(0, nil, err)
-		return
+		return 0
 	}
 	if bytes.Compare(respHeader, hdr) != 0 {
 		h(0, nil, errors.New("invalid response header"))
-		return
+		return 0
 	}
 	num, err := readNum(in, '\n')
 	if err != nil {
 		h(0, nil, errors.New("failed to get number of records"))
-		return
+		return 0
 	}
+
+  var latest uint32
 	for ; num > 0; num-- {
-		processRec(in, h)
+    msgnum := processRec(in, h)
+    if msgnum > latest {
+      latest = msgnum
+    }
 	}
+  return latest + 1
 }
 
 /*    way/
  * Read the record header and send the record data to the
  * handler
  */
-func processRec(in io.Reader, h Handler) {
+func processRec(in io.Reader, h Handler) uint32 {
 	const TOOBIG = 1024
 	recHeader := []byte(RecHeaderPfx)
 	hdr := make([]byte, len(recHeader))
 	if _, err := io.ReadFull(in, hdr); err != nil {
 		h(0, nil, err)
-		return
+		return 0
 	}
 	if bytes.Compare(recHeader, hdr) != 0 {
 		h(0, nil, errors.New("invalid record header"))
-		return
+		return 0
 	}
 	num, err := readNum(in, '|')
 	if err != nil {
 		h(0, nil, errors.New("invalid record number"))
-		return
+		return 0
 	}
 	msgnum := uint32(num)
 	sz, err := readNum(in, '\n')
@@ -165,14 +177,14 @@ func processRec(in io.Reader, h Handler) {
 	n, err := io.ReadAtLeast(in, data, int(sz))
 	if err != nil && err != io.EOF {
 		h(msgnum, nil, errors.New("failed reading record"))
-		return
+		return 0
 	}
 	if n == int(sz) {
 		_, err = in.Read(data[sz-1:])
 		if err != nil {
 			if err != io.EOF {
 				h(msgnum, nil, errors.New("failed reading record end"))
-				return
+				return 0
 			} else {
 				data[sz] = '\n'
 			}
@@ -180,9 +192,11 @@ func processRec(in io.Reader, h Handler) {
 	}
 	if data[sz] != '\n' {
 		h(msgnum, nil, errors.New("record not terminated correctly"))
-		return
+		return 0
 	}
 	h(msgnum, data[:sz], nil)
+
+  return msgnum
 }
 
 /*    way/
