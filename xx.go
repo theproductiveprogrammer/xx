@@ -44,7 +44,7 @@ func run(kaddr string) {
   }
   log.Println("Connecting to kaf: " + kaddr + "...")
 
-  kaddr = kaddr + "xx?from="
+  kaddr = kaddr + "get/xx?from="
   var msgnum uint64 = 1
   var url strings.Builder
 
