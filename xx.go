@@ -1,6 +1,7 @@
 package main
 
 import (
+  "encoding/json"
 	"bytes"
 	"errors"
 	"fmt"
@@ -44,10 +45,31 @@ func run(kaddr string) error {
 	return getKafMsgs(kaddr, processMsgs, schedule)
 }
 
-/*    understand/
- * We keep track of start requests here
+/*
+ * key data types
  */
-var STATE []string
+type StartMsg struct {
+  num uint32
+  Src string `json:"src"`
+  Exe string `json:"exe"`
+  log string `json:"log"`
+  sec int `json:"sec"`
+}
+
+type StatusMsg struct {
+  When string `json:"when"`
+  Ref uint32 `json:"ref"`
+  Exit int `json:"exit"`
+  out string `json:"out"`
+  err string `json:"err"`
+}
+
+/*    understand/
+ * Pending requests
+ */
+var PENDING []StartMsg
+
+
 
 /*    way/
  * Show any errors and if we reached the end, process the
@@ -61,7 +83,10 @@ func schedule(err error, end bool) time.Duration {
 	}
 
   if end {
-		handle(STATE)
+    if len(PENDING) > 0 {
+      handle(PENDING)
+      PENDING = []StartMsg{}
+    }
   }
 
 	if end {
@@ -76,11 +101,64 @@ func processMsgs(num uint32, msg []byte, err error) {
 		log.Println(err)
 		return
 	}
-	STATE = append(STATE, string(msg))
+
+  showerr := func(err error) {
+    m := fmt.Sprintf("failed msg: %d (%s %s)",
+    num, string(msg), err.Error())
+    log.Println(m)
+  }
+
+	if isStartReq(msg) {
+
+    var start StartMsg
+    err := json.Unmarshal(msg, &start)
+    if err != nil {
+      showerr(err)
+    } else {
+      start.num = num
+      PENDING = append(PENDING, start)
+    }
+
+  } else if isStatusReq(msg) {
+
+    var status StatusMsg
+    err := json.Unmarshal(msg, &status)
+    if err != nil {
+      showerr(err)
+    } else {
+      for i := 0;i < len(PENDING);i++ {
+        curr := PENDING[i]
+        if curr.num == status.Ref {
+          PENDING[i] = PENDING[len(PENDING)-1]
+          PENDING = PENDING[:len(PENDING)-1]
+        }
+      }
+    }
+
+  } else {
+    showerr(errors.New("Did not understand message type"))
+  }
+
 }
 
-func handle(state []string) {
-  fmt.Println(state)
+/*    way/
+ * Guess that this is a start request when it contains
+ * an "exe" field
+ */
+func isStartReq(msg []byte) bool {
+  return bytes.Contains(msg, []byte(`"exe":`))
+}
+
+/*    way/
+ * Guess that this is a start request when it contains
+ * a "ref" field
+ */
+func isStatusReq(msg []byte) bool {
+  return bytes.Contains(msg, []byte(`"ref":`))
+}
+
+func handle(pending []StartMsg) {
+  fmt.Println(pending)
 }
 
 /*    way/
