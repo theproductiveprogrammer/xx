@@ -41,25 +41,32 @@ version: ` + VERSION)
  * gets kaf messages and processes them
  */
 func run(kaddr string) error {
-	return getKafMsgs(kaddr,
-		func(num uint32, msg []byte, err error) {
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			fmt.Println(num)
-			fmt.Println(string(msg))
-		},
-		func(err error, end bool) time.Duration {
-			if err != nil {
-				log.Println(err)
-			}
-			if end {
-				return 7 * time.Second
-			} else {
-				return 200 * time.Millisecond
-			}
-		})
+	return getKafMsgs(kaddr, processMsgs, schedule)
+}
+
+/*    understand/
+ * We keep track of start requests here
+ */
+var REQS []string
+
+func schedule(err error, end bool) time.Duration {
+  if err != nil {
+    log.Println(err)
+  }
+  if end {
+    fmt.Println(REQS)
+    return 7 * time.Second
+  } else {
+    return 200 * time.Millisecond
+  }
+}
+
+func processMsgs(num uint32, msg []byte, err error) {
+  if err != nil {
+    log.Println(err)
+    return
+  }
+  REQS = append(REQS, string(msg))
 }
 
 /*    way/
