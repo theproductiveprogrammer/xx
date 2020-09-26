@@ -78,29 +78,29 @@ func getKafMsgs(kaddr string, h Handler, s Scheduler) error {
 	kaddr = kaddr + "get/xx?from="
 	var from uint32 = 1
 	var url strings.Builder
-  var wait time.Duration
-  first := true
+	var wait time.Duration
+	first := true
 
 	for {
 
-    url.Reset()
-    url.WriteString(kaddr)
-    url.WriteString(strconv.FormatUint(uint64(from), 10))
+		url.Reset()
+		url.WriteString(kaddr)
+		url.WriteString(strconv.FormatUint(uint64(from), 10))
 
-    resp, err := http.Get(url.String())
+		resp, err := http.Get(url.String())
 
 		if err == nil {
-      f := process(resp, h)
-      if f > from {
-        from = f
-      }
+			f := process(resp, h)
+			if f > from {
+				from = f
+			}
 		}
-    if first {
-      wait = s(0, err)
-      first = false
-    } else {
-      wait = s(from, err)
-    }
+		if first {
+			wait = s(0, err)
+			first = false
+		} else {
+			wait = s(from, err)
+		}
 
 		if wait == 0 {
 			return err
@@ -122,9 +122,9 @@ func process(resp *http.Response, h Handler) uint32 {
 	in := resp.Body
 	defer in.Close()
 
-  if resp.StatusCode != 200 {
-    return handleErrors(resp.StatusCode, in, h)
-  }
+	if resp.StatusCode != 200 {
+		return handleErrors(resp.StatusCode, in, h)
+	}
 
 	respHeader := []byte(RespHeaderPfx)
 	hdr := make([]byte, len(respHeader))
@@ -142,42 +142,42 @@ func process(resp *http.Response, h Handler) uint32 {
 		return 0
 	}
 
-  var latest uint32
+	var latest uint32
 	for ; num > 0; num-- {
-    msgnum := processRec(in, h)
-    if msgnum > latest {
-      latest = msgnum
-    }
+		msgnum := processRec(in, h)
+		if msgnum > latest {
+			latest = msgnum
+		}
 	}
-  return latest + 1
+	return latest + 1
 }
 
 /*    way/
  * Send the error message and status code
  */
 func handleErrors(status int, in io.Reader, h Handler) uint32 {
-    var msg strings.Builder
-    msg.WriteString(strconv.FormatUint(uint64(status), 10))
-    e := make([]byte, 256)
-    tot := 0
-    for {
-      if tot >= len(e) {
-        break
-      }
-      n,err := in.Read(e[tot:])
-      if n > 0 {
-        tot += n
-      }
-      if err != nil {
-        break
-      }
-    }
-    if tot > 0 {
-      msg.WriteByte(' ')
-      msg.Write(e[:tot])
-    }
-    h(0, nil, errors.New(msg.String()))
-    return 0
+	var msg strings.Builder
+	msg.WriteString(strconv.FormatUint(uint64(status), 10))
+	e := make([]byte, 256)
+	tot := 0
+	for {
+		if tot >= len(e) {
+			break
+		}
+		n, err := in.Read(e[tot:])
+		if n > 0 {
+			tot += n
+		}
+		if err != nil {
+			break
+		}
+	}
+	if tot > 0 {
+		msg.WriteByte(' ')
+		msg.Write(e[:tot])
+	}
+	h(0, nil, errors.New(msg.String()))
+	return 0
 }
 
 /*    way/
@@ -229,7 +229,7 @@ func processRec(in io.Reader, h Handler) uint32 {
 	}
 	h(msgnum, data[:sz], nil)
 
-  return msgnum
+	return msgnum
 }
 
 /*    way/
@@ -247,9 +247,9 @@ func readNum(in io.Reader, end byte) (uint64, error) {
 			return 0, errors.New("read failed")
 		}
 		if err == io.EOF {
-      return strconv.ParseUint(string(buf[:i+1]), 10, 32)
-    }
-    if p[0] == end {
+			return strconv.ParseUint(string(buf[:i+1]), 10, 32)
+		}
+		if p[0] == end {
 			return strconv.ParseUint(string(buf[:i]), 10, 32)
 		}
 	}
