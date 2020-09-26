@@ -199,7 +199,10 @@ func readNum(in io.Reader, end byte) (uint64, error) {
 		if err != nil && err != io.EOF {
 			return 0, errors.New("read failed")
 		}
-		if err == io.EOF || p[0] == end {
+		if err == io.EOF {
+      return strconv.ParseUint(string(buf[:i+1]), 10, 32)
+    }
+    if p[0] == end {
 			return strconv.ParseUint(string(buf[:i]), 10, 32)
 		}
 	}
