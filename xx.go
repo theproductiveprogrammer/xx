@@ -76,12 +76,14 @@ func getKafMsgs(kaddr string, h Handler, s Scheduler) error {
 	log.Println("Connecting to kaf: " + kaddr + "...")
 
 	kaddr = kaddr + "get/xx?from="
-	var from uint32 = 1
+	var latest, from uint32
 	var url strings.Builder
 	var wait time.Duration
 	first := true
 
 	for {
+
+    from = latest + 1
 
 		url.Reset()
 		url.WriteString(kaddr)
@@ -90,10 +92,10 @@ func getKafMsgs(kaddr string, h Handler, s Scheduler) error {
 		resp, err := http.Get(url.String())
 
 		if err == nil {
-			f := process(resp, h)
-			if f > from {
-				from = f
-			}
+      last := process(resp, h)
+      if last > latest {
+        latest = last
+      }
 		}
 		if first {
 			wait = s(0, err)
@@ -106,6 +108,7 @@ func getKafMsgs(kaddr string, h Handler, s Scheduler) error {
 			return err
 		}
 		time.Sleep(wait)
+
 	}
 }
 
@@ -142,14 +145,14 @@ func process(resp *http.Response, h Handler) uint32 {
 		return 0
 	}
 
-	var latest uint32
-	for ; num > 0; num-- {
+	var last uint32
+  for i := 0; i < int(num); i++ {
 		msgnum := processRec(in, h)
-		if msgnum > latest {
-			latest = msgnum
+		if msgnum > last {
+			last = msgnum
 		}
 	}
-	return latest + 1
+	return last
 }
 
 /*    way/
