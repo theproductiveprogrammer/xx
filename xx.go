@@ -38,13 +38,6 @@ eg: go run xx.go 127.0.0.1:7749
 version: ` + VERSION)
 }
 
-/*    way/
- * gets kaf messages and processes them
- */
-func run(kaddr string) error {
-	return getKafMsgs(kaddr, processMsgs, schedule)
-}
-
 /*
  * key data types
  */
@@ -64,30 +57,40 @@ type StatusMsg struct {
   err string `json:"err"`
 }
 
-/*    understand/
- * Pending requests
+/*    way/
+ * gets kaf messages and processes them
  */
-var PENDING []StartMsg
+func run(kaddr string) error {
+  var pending []StartMsg
 
+  processor := func(num uint32, msg []byte, err error) {
+    pending, err = processMsgs(num, msg, err, pending)
+    if err != nil {
+      log.Println(err)
+    }
+  }
+
+  scheduler := func(err error, end bool) time.Duration {
+    if len(pending) > 0 {
+      handle(pending)
+      pending = []StartMsg{}
+    }
+    return schedule(err, end)
+  }
+
+	return getKafMsgs(kaddr, processor, scheduler)
+}
 
 
 /*    way/
- * Show any errors and if we reached the end, process the
- * current state, waiting a while before we try to get
- * more messages. If there could be more messages, try to
- * get them sooner.
+ * Show any errors and request to get the next messages
+ * - quickly if there could be more, slower if we seem
+ * to have reached the end.
  */
 func schedule(err error, end bool) time.Duration {
 	if err != nil {
 		log.Println(err)
 	}
-
-  if end {
-    if len(PENDING) > 0 {
-      handle(PENDING)
-      PENDING = []StartMsg{}
-    }
-  }
 
 	if end {
 		return 7 * time.Second
@@ -96,16 +99,18 @@ func schedule(err error, end bool) time.Duration {
 	}
 }
 
-func processMsgs(num uint32, msg []byte, err error) {
+/*    way/
+ * Update the pending list with our message
+ */
+func processMsgs(num uint32, msg []byte, err error, pending []StartMsg) ([]StartMsg,error) {
 	if err != nil {
-		log.Println(err)
-		return
+		return nil, err
 	}
 
-  showerr := func(err error) {
+  mErr := func(err error) ([]StartMsg, error) {
     m := fmt.Sprintf("failed msg: %d (%s %s)",
     num, string(msg), err.Error())
-    log.Println(m)
+    return nil, errors.New(m)
   }
 
 	if isStartReq(msg) {
@@ -113,32 +118,34 @@ func processMsgs(num uint32, msg []byte, err error) {
     var start StartMsg
     err := json.Unmarshal(msg, &start)
     if err != nil {
-      showerr(err)
+      return mErr(err)
     } else {
       start.num = num
-      PENDING = append(PENDING, start)
+      pending = append(pending, start)
+      return pending, nil
     }
 
-  } else if isStatusReq(msg) {
+  }
+
+  if isStatusReq(msg) {
 
     var status StatusMsg
     err := json.Unmarshal(msg, &status)
     if err != nil {
-      showerr(err)
+      return mErr(err)
     } else {
-      for i := 0;i < len(PENDING);i++ {
-        curr := PENDING[i]
+      for i := 0;i < len(pending);i++ {
+        curr := pending[i]
         if curr.num == status.Ref {
-          PENDING[i] = PENDING[len(PENDING)-1]
-          PENDING = PENDING[:len(PENDING)-1]
+          pending[i] = pending[len(pending)-1]
+          pending = pending[:len(pending)-1]
         }
       }
+      return pending, nil
     }
-
-  } else {
-    showerr(errors.New("Did not understand message type"))
   }
 
+  return mErr(errors.New("Did not understand message type"))
 }
 
 /*    way/
@@ -159,6 +166,7 @@ func isStatusReq(msg []byte) bool {
 
 func handle(pending []StartMsg) {
   fmt.Println(pending)
+
 }
 
 /*    way/
