@@ -54,11 +54,11 @@ func run(kaddr string) error {
 			if err != nil {
 				log.Println(err)
 			}
-      if end {
-        return 7 * time.Second
-      } else {
-        return 200 * time.Millisecond
-      }
+			if end {
+				return 7 * time.Second
+			} else {
+				return 200 * time.Millisecond
+			}
 		})
 }
 
@@ -79,7 +79,7 @@ func getKafMsgs(kaddr string, h Handler, s Scheduler) error {
 	kaddr = kaddr + "get/xx?from="
 	var latest, from uint32
 	var url strings.Builder
-  var end bool = false
+	var end bool = false
 
 	for {
 
@@ -96,10 +96,10 @@ func getKafMsgs(kaddr string, h Handler, s Scheduler) error {
 			if last > latest {
 				latest = last
 			}
-      end = num == 0
+			end = num == 0
 		}
 
-    wait := s(err, end)
+		wait := s(err, end)
 		if wait == 0 {
 			return err
 		}
@@ -176,7 +176,7 @@ func handleErrors(status int, in io.Reader, h Handler) (uint64, uint32) {
 		msg.Write(e[:tot])
 	}
 	h(0, nil, errors.New(msg.String()))
-	return 0,0
+	return 0, 0
 }
 
 /*    way/
