@@ -10,17 +10,14 @@ Uses [kaf](https://github.com/theproductiveprogrammer/kaf) to decide what to do:
 $> xx <kaf addr>  # start
 ```
 
-Listens for start requests on log `xx`:
+Listens for start requests on log `xx`.
 
 ```json
 {
-  from: "requester",
-  proc: "full command to start",
-  report: none | exit | out | err,
-  report: {
-    every: "10", /* seconds */
-    report: out | err,
-  }
+  src: "requester",
+  exe: "full command to start",
+  log: "none" | "out" | "err",
+  sec: "10"
 }
 ```
 
