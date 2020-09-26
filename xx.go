@@ -50,23 +50,23 @@ func run(kaddr string) error {
 var REQS []string
 
 func schedule(err error, end bool) time.Duration {
-  if err != nil {
-    log.Println(err)
-  }
-  if end {
-    fmt.Println(REQS)
-    return 7 * time.Second
-  } else {
-    return 200 * time.Millisecond
-  }
+	if err != nil {
+		log.Println(err)
+	}
+	if end {
+		fmt.Println(REQS)
+		return 7 * time.Second
+	} else {
+		return 200 * time.Millisecond
+	}
 }
 
 func processMsgs(num uint32, msg []byte, err error) {
-  if err != nil {
-    log.Println(err)
-    return
-  }
-  REQS = append(REQS, string(msg))
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	REQS = append(REQS, string(msg))
 }
 
 /*    way/
