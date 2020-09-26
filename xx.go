@@ -1,8 +1,8 @@
 package main
 
 import (
-  "encoding/json"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -42,45 +42,44 @@ version: ` + VERSION)
  * key data types
  */
 type StartMsg struct {
-  num uint32
-  Src string `json:"src"`
-  Exe string `json:"exe"`
-  log string `json:"log"`
-  sec int `json:"sec"`
+	num uint32
+	Src string `json:"src"`
+	Exe string `json:"exe"`
+	log string `json:"log"`
+	sec int    `json:"sec"`
 }
 
 type StatusMsg struct {
-  When string `json:"when"`
-  Ref uint32 `json:"ref"`
-  Exit int `json:"exit"`
-  out string `json:"out"`
-  err string `json:"err"`
+	When string `json:"when"`
+	Ref  uint32 `json:"ref"`
+	Exit int    `json:"exit"`
+	out  string `json:"out"`
+	err  string `json:"err"`
 }
 
 /*    way/
  * gets kaf messages and processes them
  */
 func run(kaddr string) error {
-  var pending []StartMsg
+	var pending []StartMsg
 
-  processor := func(num uint32, msg []byte, err error) {
-    pending, err = processMsgs(num, msg, err, pending)
-    if err != nil {
-      log.Println(err)
-    }
-  }
+	processor := func(num uint32, msg []byte, err error) {
+		pending, err = processMsgs(num, msg, err, pending)
+		if err != nil {
+			log.Println(err)
+		}
+	}
 
-  scheduler := func(err error, end bool) time.Duration {
-    if len(pending) > 0 {
-      handle(pending)
-      pending = []StartMsg{}
-    }
-    return schedule(err, end)
-  }
+	scheduler := func(err error, end bool) time.Duration {
+		if len(pending) > 0 {
+			handle(pending)
+			pending = []StartMsg{}
+		}
+		return schedule(err, end)
+	}
 
 	return getKafMsgs(kaddr, processor, scheduler)
 }
-
 
 /*    way/
  * Show any errors and request to get the next messages
@@ -102,50 +101,50 @@ func schedule(err error, end bool) time.Duration {
 /*    way/
  * Update the pending list with our message
  */
-func processMsgs(num uint32, msg []byte, err error, pending []StartMsg) ([]StartMsg,error) {
+func processMsgs(num uint32, msg []byte, err error, pending []StartMsg) ([]StartMsg, error) {
 	if err != nil {
 		return nil, err
 	}
 
-  mErr := func(err error) ([]StartMsg, error) {
-    m := fmt.Sprintf("failed msg: %d (%s %s)",
-    num, string(msg), err.Error())
-    return nil, errors.New(m)
-  }
+	mErr := func(err error) ([]StartMsg, error) {
+		m := fmt.Sprintf("failed msg: %d (%s %s)",
+			num, string(msg), err.Error())
+		return nil, errors.New(m)
+	}
 
 	if isStartReq(msg) {
 
-    var start StartMsg
-    err := json.Unmarshal(msg, &start)
-    if err != nil {
-      return mErr(err)
-    } else {
-      start.num = num
-      pending = append(pending, start)
-      return pending, nil
-    }
+		var start StartMsg
+		err := json.Unmarshal(msg, &start)
+		if err != nil {
+			return mErr(err)
+		} else {
+			start.num = num
+			pending = append(pending, start)
+			return pending, nil
+		}
 
-  }
+	}
 
-  if isStatusReq(msg) {
+	if isStatusReq(msg) {
 
-    var status StatusMsg
-    err := json.Unmarshal(msg, &status)
-    if err != nil {
-      return mErr(err)
-    } else {
-      for i := 0;i < len(pending);i++ {
-        curr := pending[i]
-        if curr.num == status.Ref {
-          pending[i] = pending[len(pending)-1]
-          pending = pending[:len(pending)-1]
-        }
-      }
-      return pending, nil
-    }
-  }
+		var status StatusMsg
+		err := json.Unmarshal(msg, &status)
+		if err != nil {
+			return mErr(err)
+		} else {
+			for i := 0; i < len(pending); i++ {
+				curr := pending[i]
+				if curr.num == status.Ref {
+					pending[i] = pending[len(pending)-1]
+					pending = pending[:len(pending)-1]
+				}
+			}
+			return pending, nil
+		}
+	}
 
-  return mErr(errors.New("Did not understand message type"))
+	return mErr(errors.New("Did not understand message type"))
 }
 
 /*    way/
@@ -153,7 +152,7 @@ func processMsgs(num uint32, msg []byte, err error, pending []StartMsg) ([]Start
  * an "exe" field
  */
 func isStartReq(msg []byte) bool {
-  return bytes.Contains(msg, []byte(`"exe":`))
+	return bytes.Contains(msg, []byte(`"exe":`))
 }
 
 /*    way/
@@ -161,11 +160,11 @@ func isStartReq(msg []byte) bool {
  * a "ref" field
  */
 func isStatusReq(msg []byte) bool {
-  return bytes.Contains(msg, []byte(`"ref":`))
+	return bytes.Contains(msg, []byte(`"ref":`))
 }
 
 func handle(pending []StartMsg) {
-  fmt.Println(pending)
+	fmt.Println(pending)
 
 }
 
