@@ -78,33 +78,34 @@ func getKafMsgs(kaddr string, h Handler, s Scheduler) error {
 	kaddr = kaddr + "get/xx?from="
 	var from uint32 = 1
 	var url strings.Builder
-
-	url.WriteString(kaddr)
-	url.WriteString(strconv.FormatUint(uint64(from), 10))
-	resp, err := http.Get(url.String())
-	if err != nil {
-		wait := s(0, err)
-		if wait == 0 {
-			return err
-		}
-	}
+  var wait time.Duration
+  first := true
 
 	for {
+
+    url.Reset()
+    url.WriteString(kaddr)
+    url.WriteString(strconv.FormatUint(uint64(from), 10))
+
+    resp, err := http.Get(url.String())
+
 		if err == nil {
       f := process(resp, h)
       if f > from {
         from = f
       }
 		}
-		wait := s(from, err)
+    if first {
+      wait = s(0, err)
+      first = false
+    } else {
+      wait = s(from, err)
+    }
+
 		if wait == 0 {
 			return err
 		}
 		time.Sleep(wait)
-    url.Reset()
-    url.WriteString(kaddr)
-    url.WriteString(strconv.FormatUint(uint64(from), 10))
-		resp, err = http.Get(url.String())
 	}
 }
 
@@ -120,6 +121,10 @@ const RecHeaderPfx = "KAF_MSG|"
 func process(resp *http.Response, h Handler) uint32 {
 	in := resp.Body
 	defer in.Close()
+
+  if resp.StatusCode != 200 {
+    return handleErrors(resp.StatusCode, in, h)
+  }
 
 	respHeader := []byte(RespHeaderPfx)
 	hdr := make([]byte, len(respHeader))
@@ -145,6 +150,34 @@ func process(resp *http.Response, h Handler) uint32 {
     }
 	}
   return latest + 1
+}
+
+/*    way/
+ * Send the error message and status code
+ */
+func handleErrors(status int, in io.Reader, h Handler) uint32 {
+    var msg strings.Builder
+    msg.WriteString(strconv.FormatUint(uint64(status), 10))
+    e := make([]byte, 256)
+    tot := 0
+    for {
+      if tot >= len(e) {
+        break
+      }
+      n,err := in.Read(e[tot:])
+      if n > 0 {
+        tot += n
+      }
+      if err != nil {
+        break
+      }
+    }
+    if tot > 0 {
+      msg.WriteByte(' ')
+      msg.Write(e[:tot])
+    }
+    h(0, nil, errors.New(msg.String()))
+    return 0
 }
 
 /*    way/
@@ -224,4 +257,4 @@ func readNum(in io.Reader, end byte) (uint64, error) {
 }
 
 type Handler func(num uint32, msg []byte, err error)
-type Scheduler func(num uint32, err error) time.Duration
+type Scheduler func(from uint32, err error) time.Duration
