@@ -2,6 +2,8 @@ package main
 
 import (
   "strconv"
+  "io/ioutil"
+  "time"
   "strings"
   "fmt"
   "log"
@@ -48,11 +50,40 @@ func run(kaddr string) {
 
   url.WriteString(kaddr)
   url.WriteString(strconv.FormatUint(msgnum, 10))
-  _, err := http.Get(url.String())
+  resp, err := http.Get(url.String())
   if err != nil {
     log.Fatal("Failed to connect")
   }
 
   for {
+    if err == nil {
+      process(resp)
+    }
+    time.Sleep(7 * time.Second)
+    resp, err = http.Get(url.String())
   }
 }
+
+/*    way/
+ * Get the message data for processing
+ */
+func process(resp *http.Response) {
+  msgs := loadMsgs(resp)
+  fmt.Println(msgs)
+}
+
+func loadMsgs(resp *http.Response) []msg {
+  defer resp.Body.Close()
+  body, err := ioutil.ReadAll(resp.Body)
+  if err != nil {
+    fmt.Println(err)
+    return nil
+  }
+  return []msg{ msg{ string(body) } }
+}
+
+type msg struct {
+  v string
+}
+
+
