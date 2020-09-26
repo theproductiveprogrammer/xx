@@ -50,14 +50,22 @@ func run(kaddr string) error {
     fmt.Println(num)
     fmt.Println(string(msg))
   },
-  func (err error) time.Duration {
+  func (num uint32, err error) time.Duration {
     if err != nil {
       log.Println(err)
+      if num == 0 {
+        return 0
+      }
     }
     return 7 * time.Second
   })
 }
 
+/*    way/
+ * connect to the kaf address and request the latest
+ * logs as per the scheduler, passing the data received
+ * to the handler along with any errors.
+ */
 func getKafMsgs(kaddr string, h Handler, s Scheduler) error {
   if kaddr[len(kaddr)-1] != '/' {
     kaddr = kaddr + "/"
@@ -75,16 +83,19 @@ func getKafMsgs(kaddr string, h Handler, s Scheduler) error {
   url.WriteString(strconv.FormatUint(msgnum, 10))
   resp, err := http.Get(url.String())
   if err != nil {
-    log.Fatal("Failed to connect")
+    wait := s(0, err)
+    if wait == 0 {
+      return err
+    }
   }
 
   for {
     if err == nil {
       process(resp, h)
     }
-    wait := s(err)
+    wait := s(0, err) //TODO
     if wait == 0 {
-      return nil
+      return err
     }
     time.Sleep(wait)
     resp, err = http.Get(url.String())
@@ -196,6 +207,6 @@ func readNum(in io.Reader, end byte) (uint64,error) {
 }
 
 type Handler func (num uint32, msg []byte, err error)
-type Scheduler func (err error) time.Duration
+type Scheduler func (num uint32, err error) time.Duration
 
 
