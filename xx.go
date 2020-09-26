@@ -47,14 +47,24 @@ func run(kaddr string) error {
 /*    understand/
  * We keep track of start requests here
  */
-var REQS []string
+var STATE []string
 
+/*    way/
+ * Show any errors and if we reached the end, process the
+ * current state, waiting a while before we try to get
+ * more messages. If there could be more messages, try to
+ * get them sooner.
+ */
 func schedule(err error, end bool) time.Duration {
 	if err != nil {
 		log.Println(err)
 	}
+
+  if end {
+		handle(STATE)
+  }
+
 	if end {
-		fmt.Println(REQS)
 		return 7 * time.Second
 	} else {
 		return 200 * time.Millisecond
@@ -66,7 +76,11 @@ func processMsgs(num uint32, msg []byte, err error) {
 		log.Println(err)
 		return
 	}
-	REQS = append(REQS, string(msg))
+	STATE = append(STATE, string(msg))
+}
+
+func handle(state []string) {
+  fmt.Println(state)
 }
 
 /*    way/
