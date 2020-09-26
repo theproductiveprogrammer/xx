@@ -38,7 +38,7 @@ version: ` + VERSION)
 }
 
 /*    way/
- * runs forever, listening for start messages from kaf.
+ * gets kaf messages and processes them
  */
 func run(kaddr string) error {
 	return getKafMsgs(kaddr,
@@ -50,14 +50,15 @@ func run(kaddr string) error {
 			fmt.Println(num)
 			fmt.Println(string(msg))
 		},
-		func(num uint32, err error) time.Duration {
+		func(err error, end bool) time.Duration {
 			if err != nil {
 				log.Println(err)
-				if num == 0 {
-					return 0
-				}
 			}
-			return 7 * time.Second
+      if end {
+        return 7 * time.Second
+      } else {
+        return 200 * time.Millisecond
+      }
 		})
 }
 
@@ -78,8 +79,7 @@ func getKafMsgs(kaddr string, h Handler, s Scheduler) error {
 	kaddr = kaddr + "get/xx?from="
 	var latest, from uint32
 	var url strings.Builder
-	var wait time.Duration
-	first := true
+  var end bool = false
 
 	for {
 
@@ -92,18 +92,14 @@ func getKafMsgs(kaddr string, h Handler, s Scheduler) error {
 		resp, err := http.Get(url.String())
 
 		if err == nil {
-			last := process(resp, h)
+			num, last := process(resp, h)
 			if last > latest {
 				latest = last
 			}
-		}
-		if first {
-			wait = s(0, err)
-			first = false
-		} else {
-			wait = s(from, err)
+      end = num == 0
 		}
 
+    wait := s(err, end)
 		if wait == 0 {
 			return err
 		}
@@ -121,7 +117,7 @@ const RecHeaderPfx = "KAF_MSG|"
 /*    way/
  * Read the response header and process all the records
  */
-func process(resp *http.Response, h Handler) uint32 {
+func process(resp *http.Response, h Handler) (uint64, uint32) {
 	in := resp.Body
 	defer in.Close()
 
@@ -133,16 +129,16 @@ func process(resp *http.Response, h Handler) uint32 {
 	hdr := make([]byte, len(respHeader))
 	if _, err := io.ReadFull(in, hdr); err != nil {
 		h(0, nil, err)
-		return 0
+		return 0, 0
 	}
 	if bytes.Compare(respHeader, hdr) != 0 {
 		h(0, nil, errors.New("invalid response header"))
-		return 0
+		return 0, 0
 	}
 	num, err := readNum(in, '\n')
 	if err != nil {
 		h(0, nil, errors.New("failed to get number of records"))
-		return 0
+		return 0, 0
 	}
 
 	var last uint32
@@ -152,13 +148,13 @@ func process(resp *http.Response, h Handler) uint32 {
 			last = msgnum
 		}
 	}
-	return last
+	return num, last
 }
 
 /*    way/
  * Send the error message and status code
  */
-func handleErrors(status int, in io.Reader, h Handler) uint32 {
+func handleErrors(status int, in io.Reader, h Handler) (uint64, uint32) {
 	var msg strings.Builder
 	msg.WriteString(strconv.FormatUint(uint64(status), 10))
 	e := make([]byte, 256)
@@ -180,7 +176,7 @@ func handleErrors(status int, in io.Reader, h Handler) uint32 {
 		msg.Write(e[:tot])
 	}
 	h(0, nil, errors.New(msg.String()))
-	return 0
+	return 0,0
 }
 
 /*    way/
@@ -260,4 +256,4 @@ func readNum(in io.Reader, end byte) (uint64, error) {
 }
 
 type Handler func(num uint32, msg []byte, err error)
-type Scheduler func(from uint32, err error) time.Duration
+type Scheduler func(err error, end bool) time.Duration
