@@ -18,7 +18,7 @@ Listens for start requests on log `xx`.
   exe: "path to executable",
   dir: "start directory",
   args: ["arguments","to","exe"],	
-  sec: "10"
+  secs: 10,
 }
 ```
 
