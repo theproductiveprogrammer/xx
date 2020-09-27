@@ -15,8 +15,8 @@ Listens for start requests on log `xx`.
 ```json
 {
   src: "requester",
-  exe: "full command to start",
-  log: "none" | "out" | "err",
+  exe: "path to executable",
+  args: ["arguments","to","exe"],	
   sec: "10"
 }
 ```
