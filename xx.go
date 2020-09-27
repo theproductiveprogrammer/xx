@@ -203,11 +203,9 @@ func putKafMsgs(kaddr string, c chan sendStatus) {
 			req.res <- err
 			continue
 		}
-		log.Println("Sending message:", string(data))
-		/*
-			_, err = http.Post(kaddr,
-				"application/json",
-				bytes.NewReader(data))*/
+    _, err = http.Post(kaddr,
+      "application/json",
+      bytes.NewReader(data))
 		req.res <- err
 	}
 
