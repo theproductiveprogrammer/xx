@@ -28,8 +28,7 @@ And adds status:
   when: <ISO-Format>,
   ref: "msg id",
   exit: "code",
-  out: "output",
-  err: "output"
+  op: "output"
 }
 ```
 
