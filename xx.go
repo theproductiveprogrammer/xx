@@ -1,6 +1,7 @@
 package main
 
 import (
+  "os/exec"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -45,16 +46,17 @@ type StartMsg struct {
 	num uint32
 	Src string `json:"src"`
 	Exe string `json:"exe"`
-	log string `json:"log"`
-	sec int    `json:"sec"`
+  Args []string `json:"args"`
+	Log string `json:"log"`
+	Sec int    `json:"sec"`
 }
 
 type StatusMsg struct {
 	When string `json:"when"`
 	Ref  uint32 `json:"ref"`
 	Exit int    `json:"exit"`
-	out  string `json:"out"`
-	err  string `json:"err"`
+	Out  string `json:"out"`
+	Err  string `json:"err"`
 }
 
 type sendStatus struct {
@@ -172,21 +174,132 @@ func isStatusReq(msg []byte) bool {
 	return bytes.Contains(msg, []byte(`"ref":`))
 }
 
-/* TODO */
+/*    way/
+ * start a goroutine for each pending request
+ */
 func handle(setStatus chan sendStatus, pending []StartMsg) {
-	fmt.Println(pending)
 	for i := 0; i < len(pending); i++ {
-		curr := pending[i]
-		var res chan error
-		status := StatusMsg{
-			Ref: curr.num,
-		}
-		setStatus <- sendStatus{&status, res}
-		err := <-res
-		if err != nil {
-			log.Println(err)
-		}
+    go start(pending[i], setStatus)
 	}
+}
+
+/*    way/
+ * Start the given process and capture it's output,
+ * sending the status ever 'sec' seconds and on exit
+ */
+func start(start StartMsg, setStatus chan sendStatus) {
+
+  log.Println(fmt.Sprintf(`starting: "%s"`, start.Exe))
+
+  limitSize := func(status *StatusMsg) {
+    const max = 900
+    lo := len(status.Out)
+    le := len(status.Err)
+    t := lo + le
+    if t < max {
+      return
+    }
+    so := (max * lo) / t
+    se := (max * le) / t
+    if so > 0 {
+      status.Out = status.Out[:so]
+    }
+    if se > 0 {
+      status.Err = status.Err[:se]
+    }
+  }
+
+  fmt.Println(11)
+
+  send := func(status *StatusMsg) {
+    var res chan error
+    limitSize(status)
+    fmt.Println("rm sending", status)
+    setStatus <- sendStatus{status, res}
+    err := <-res
+    if err != nil {
+      log.Println(err)
+    }
+  }
+  fmt.Println(22)
+
+  sendErr := func(err error) {
+    send(&StatusMsg{
+      When: time.Now().UTC().Format(time.RFC3339),
+      Ref: start.num,
+      Exit: -1,
+      Err: err.Error(),
+    })
+    log.Println(err)
+  }
+
+  cmd := exec.Command(start.Exe, start.Args...)
+
+  stderr, err := cmd.StderrPipe()
+  if err != nil {
+    sendErr(err)
+    return
+  }
+  stdout, err := cmd.StdoutPipe()
+  if err != nil {
+    sendErr(err)
+    return
+  }
+
+  var xit chan error
+  go func() {
+    sec := time.Duration(start.Sec)
+    if sec < 1 {
+      sec = 60 * 60 * 24 * 365
+    }
+    ticker := time.NewTicker(sec * time.Second)
+    defer ticker.Stop()
+
+    var o, e string
+    out := make([]byte, 1024)
+    err := make([]byte, 1024)
+
+    for {
+      select {
+      case <-xit:
+        osz := readAtMost(stdout, out)
+        esz := readAtMost(stderr, err)
+        o = string(out[:osz])
+        e = string(err[:esz])
+        send(&StatusMsg{
+          When: time.Now().UTC().Format(time.RFC3339),
+          Ref: start.num,
+          Exit: cmd.ProcessState.ExitCode(),
+          Out: o,
+          Err: e,
+        })
+      case <-ticker.C:
+        osz := readAtMost(stdout, out)
+        esz := readAtMost(stderr, err)
+        o = string(out[:osz])
+        e = string(err[:esz])
+        send(&StatusMsg{
+          When: time.Now().UTC().Format(time.RFC3339),
+          Ref: start.num,
+          Out: o,
+          Err: e,
+        })
+      }
+    }
+  }()
+
+  fmt.Println(33)
+
+  if err := cmd.Start(); err != nil {
+  fmt.Println(38)
+    xit <- err
+    return
+  }
+  fmt.Println(34)
+  xit <- cmd.Wait()
+  fmt.Println(35)
+
+  fmt.Println("rm Proc exting..")
 }
 
 /*    way/
@@ -203,14 +316,15 @@ func putKafMsgs(kaddr string, c chan sendStatus) {
 
 	for {
 		req := <-c
-		data, err := json.Marshal(req.msg)
+		_, err := json.Marshal(req.msg)
 		if err != nil {
 			req.res <- err
 			continue
 		}
+    /*
 		_, err = http.Post(kaddr,
 			"application/json",
-			bytes.NewReader(data))
+			bytes.NewReader(data))*/
 		req.res <- err
 	}
 
@@ -305,19 +419,13 @@ func process(resp *http.Response, h Handler) (uint64, uint32) {
 	return num, last
 }
 
-/*    way/
- * Send the error message and status code
- */
-func handleErrors(status int, in io.Reader, h Handler) (uint64, uint32) {
-	var msg strings.Builder
-	msg.WriteString(strconv.FormatUint(uint64(status), 10))
-	e := make([]byte, 256)
+func readAtMost(in io.Reader, buf []byte) int {
 	tot := 0
 	for {
-		if tot >= len(e) {
+		if tot >= len(buf) {
 			break
 		}
-		n, err := in.Read(e[tot:])
+		n, err := in.Read(buf[tot:])
 		if n > 0 {
 			tot += n
 		}
@@ -325,6 +433,17 @@ func handleErrors(status int, in io.Reader, h Handler) (uint64, uint32) {
 			break
 		}
 	}
+  return tot
+}
+
+/*    way/
+ * Send the error message and status code
+ */
+func handleErrors(status int, in io.Reader, h Handler) (uint64, uint32) {
+	var msg strings.Builder
+	msg.WriteString(strconv.FormatUint(uint64(status), 10))
+	e := make([]byte, 256)
+  tot := readAtMost(in, e)
 	if tot > 0 {
 		msg.WriteByte(' ')
 		msg.Write(e[:tot])
