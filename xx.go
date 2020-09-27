@@ -82,7 +82,7 @@ func run(kaddr string) error {
 	}
 
 	scheduler := func(err error, end bool) time.Duration {
-		if len(pending) > 0 {
+		if end && len(pending) > 0 {
 			handle(c, pending)
 			pending = []StartMsg{}
 		}
