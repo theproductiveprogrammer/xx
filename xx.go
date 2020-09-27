@@ -63,16 +63,16 @@ type StatusMsg struct {
 func run(kaddr string) error {
 	var pending []StartMsg
 
-  c := make(chan StatusMsg)
-  e := make(chan error)
+	c := make(chan StatusMsg)
+	e := make(chan error)
 
-  go func() {
-    for {
-      log.Println(<-e)
-    }
-  }()
+	go func() {
+		for {
+			log.Println(<-e)
+		}
+	}()
 
-  go putKafMsgs(kaddr, c, e)
+	go putKafMsgs(kaddr, c, e)
 
 	processor := func(num uint32, msg []byte, err error) {
 		pending, err = processMsgs(num, msg, err, pending)
@@ -176,13 +176,13 @@ func isStatusReq(msg []byte) bool {
 
 func handle(setStatus chan StatusMsg, pending []StartMsg) {
 	fmt.Println(pending)
-  for i := 0;i < len(pending);i++ {
-    curr := pending[i]
-    status := StatusMsg{
-      Ref: curr.num,
-    }
-    setStatus <- status
-  }
+	for i := 0; i < len(pending); i++ {
+		curr := pending[i]
+		status := StatusMsg{
+			Ref: curr.num,
+		}
+		setStatus <- status
+	}
 }
 
 func putKafMsgs(kaddr string, c chan StatusMsg, e chan error) {
@@ -194,21 +194,21 @@ func putKafMsgs(kaddr string, c chan StatusMsg, e chan error) {
 	}
 	kaddr = kaddr + "put/xx"
 
-  for {
-    status := <-c
-    data, err := json.Marshal(status)
-    if err != nil {
-      e <- err
-      return
-    }
-    log.Println("Sending message:", string(data))
-    _, err = http.Post(kaddr,
-    "application/json",
-    bytes.NewReader(data))
-    if err != nil {
-      e <- err
-    }
-  }
+	for {
+		status := <-c
+		data, err := json.Marshal(status)
+		if err != nil {
+			e <- err
+			return
+		}
+		log.Println("Sending message:", string(data))
+		_, err = http.Post(kaddr,
+			"application/json",
+			bytes.NewReader(data))
+		if err != nil {
+			e <- err
+		}
+	}
 
 }
 
