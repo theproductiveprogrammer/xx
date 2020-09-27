@@ -247,34 +247,35 @@ func start(start StartMsg, setStatus chan sendStatus) {
 		cmd.Dir = start.Dir
 	}
 
-  var xit chan bool
-  if start.Secs > 0 {
-    xit = make(chan bool)
-    go func() {
-      s := time.Duration(start.Secs)
-      ticker := time.NewTicker(s * time.Second)
-      for {
-        select {
-        case <-xit: return
-        case <-ticker.C:
-          out := op.String()
-          if len(out) > 0 {
-            status := StatusMsg{
-              When: time.Now().UTC().Format(time.RFC3339),
-              Ref: start.num,
-              Op: out,
-            }
-            res := make(chan error)
-            setStatus <- sendStatus{&status, res}
-            err := <-res
-            if err != nil {
-              log.Println(err)
-            }
-          }
-        }
-      }
-    }()
-  }
+	var xit chan bool
+	if start.Secs > 0 {
+		xit = make(chan bool)
+		go func() {
+			s := time.Duration(start.Secs)
+			ticker := time.NewTicker(s * time.Second)
+			for {
+				select {
+				case <-xit:
+					return
+				case <-ticker.C:
+					out := op.String()
+					if len(out) > 0 {
+						status := StatusMsg{
+							When: time.Now().UTC().Format(time.RFC3339),
+							Ref:  start.num,
+							Op:   out,
+						}
+						res := make(chan error)
+						setStatus <- sendStatus{&status, res}
+						err := <-res
+						if err != nil {
+							log.Println(err)
+						}
+					}
+				}
+			}
+		}()
+	}
 
 	err := cmd.Run()
 
@@ -291,9 +292,9 @@ func start(start StartMsg, setStatus chan sendStatus) {
 		Op:   op.String(),
 	}
 
-  if xit != nil {
-    xit <- true
-  }
+	if xit != nil {
+		xit <- true
+	}
 
 	res := make(chan error)
 	setStatus <- sendStatus{&status, res}
