@@ -1,6 +1,7 @@
 package main
 
 import (
+  "sync"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -184,6 +185,7 @@ func handle(setStatus chan sendStatus, pending []StartMsg) {
 }
 
 type Op struct {
+  mux sync.Mutex
 	used int
 	buf  []byte
 }
@@ -193,6 +195,9 @@ type Op struct {
  * as needed to keep the last few entries
  */
 func (o *Op) Write(p []byte) (int, error) {
+  o.mux.Lock()
+  defer o.mux.Unlock()
+
 	n := len(p)
 
 	if n >= len(o.buf) {
@@ -214,6 +219,17 @@ func (o *Op) Write(p []byte) (int, error) {
 	o.used += n
 
 	return len(p), nil
+}
+
+/*    way/
+ * empty the current buffer into a string
+ */
+func (o *Op) String() string {
+  o.mux.Lock()
+  defer o.mux.Unlock()
+  r := string(o.buf[:o.used])
+  o.used = 0
+  return r
 }
 
 /*    way/
@@ -243,7 +259,7 @@ func start(start StartMsg, setStatus chan sendStatus) {
 		When: time.Now().UTC().Format(time.RFC3339),
 		Ref:  start.num,
 		Exit: exit,
-		Op:   string(op.buf[:op.used]),
+		Op:   op.String(),
 	}
 
 	res := make(chan error)
