@@ -1,7 +1,6 @@
 package main
 
 import (
-  "os/exec"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -10,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -43,19 +43,19 @@ version: ` + VERSION)
  * key data types
  */
 type StartMsg struct {
-	num uint32
-	Src string `json:"src"`
-	Exe string `json:"exe"`
-  Args []string `json:"args"`
-	Log string `json:"log"`
-	Sec int    `json:"sec"`
+	num  uint32
+	Src  string   `json:"src"`
+	Exe  string   `json:"exe"`
+	Args []string `json:"args"`
+	Log  string   `json:"log"`
+	Sec  int      `json:"sec"`
 }
 
 type StatusMsg struct {
 	When string `json:"when"`
 	Ref  uint32 `json:"ref"`
 	Exit int    `json:"exit"`
-  Op   string `json:"op"`
+	Op   string `json:"op"`
 }
 
 type sendStatus struct {
@@ -178,41 +178,41 @@ func isStatusReq(msg []byte) bool {
  */
 func handle(setStatus chan sendStatus, pending []StartMsg) {
 	for i := 0; i < len(pending); i++ {
-    go start(pending[i], setStatus)
+		go start(pending[i], setStatus)
 	}
 }
 
 type Op struct {
-  used int
-  buf []byte
+	used int
+	buf  []byte
 }
 
 /*    way/
  * write into a the Output buffer, rotating it around
  * as needed to keep the last few entries
  */
-func (o *Op)Write(p []byte) (int,error) {
-  n := len(p)
+func (o *Op) Write(p []byte) (int, error) {
+	n := len(p)
 
-  if n >= len(o.buf) {
-    copy(o.buf, p[(n - len(o.buf)):])
-    o.used = len(o.buf)
-    return len(p),nil
-  }
+	if n >= len(o.buf) {
+		copy(o.buf, p[(n-len(o.buf)):])
+		o.used = len(o.buf)
+		return len(p), nil
+	}
 
-  if n + o.used <= len(o.buf) {
-    copy(o.buf[o.used:], p)
-    o.used += n
-    return len(p),nil
-  }
+	if n+o.used <= len(o.buf) {
+		copy(o.buf[o.used:], p)
+		o.used += n
+		return len(p), nil
+	}
 
-  shift := n + o.used - len(o.buf)
-  copy(o.buf, o.buf[shift:])
-  o.used -= shift
-  copy(o.buf[o.used:], p)
-  o.used += n
+	shift := n + o.used - len(o.buf)
+	copy(o.buf, o.buf[shift:])
+	o.used -= shift
+	copy(o.buf[o.used:], p)
+	o.used += n
 
-  return len(p),nil
+	return len(p), nil
 }
 
 /*    way/
@@ -220,36 +220,36 @@ func (o *Op)Write(p []byte) (int,error) {
  * sending the status ever 'sec' seconds and on exit
  */
 func start(start StartMsg, setStatus chan sendStatus) {
-  log.Println(fmt.Sprintf(`starting: "%s" [%d]`, start.Exe, start.num))
+	log.Println(fmt.Sprintf(`starting: "%s" [%d]`, start.Exe, start.num))
 
-  op := Op{ buf: make([]byte, 900) }
+	op := Op{buf: make([]byte, 900)}
 
-  cmd := exec.Command(start.Exe, start.Args...)
-  cmd.Stdout = &op
-  cmd.Stderr = &op
-  err := cmd.Run()
+	cmd := exec.Command(start.Exe, start.Args...)
+	cmd.Stdout = &op
+	cmd.Stderr = &op
+	err := cmd.Run()
 
-  exit := cmd.ProcessState.ExitCode()
-  if err != nil {
-    op.Write([]byte(err.Error()))
-    exit = -1
-  }
+	exit := cmd.ProcessState.ExitCode()
+	if err != nil {
+		op.Write([]byte(err.Error()))
+		exit = -1
+	}
 
-  status := StatusMsg{
-    When: time.Now().UTC().Format(time.RFC3339),
-    Ref: start.num,
-    Exit: exit,
-    Op: string(op.buf[:op.used]),
-  }
+	status := StatusMsg{
+		When: time.Now().UTC().Format(time.RFC3339),
+		Ref:  start.num,
+		Exit: exit,
+		Op:   string(op.buf[:op.used]),
+	}
 
-  var res chan error
-  setStatus <- sendStatus{&status, res}
-  err = <-res
-  if err != nil {
-    log.Println(err)
-  } else {
-    log.Println(fmt.Sprintf(`done: "%s" [%d]`, start.Exe, start.num))
-  }
+	var res chan error
+	setStatus <- sendStatus{&status, res}
+	err = <-res
+	if err != nil {
+		log.Println(err)
+	} else {
+		log.Println(fmt.Sprintf(`done: "%s" [%d]`, start.Exe, start.num))
+	}
 
 }
 
@@ -383,7 +383,7 @@ func readAtMost(in io.Reader, buf []byte) int {
 			break
 		}
 	}
-  return tot
+	return tot
 }
 
 /*    way/
@@ -393,7 +393,7 @@ func handleErrors(status int, in io.Reader, h Handler) (uint64, uint32) {
 	var msg strings.Builder
 	msg.WriteString(strconv.FormatUint(uint64(status), 10))
 	e := make([]byte, 256)
-  tot := readAtMost(in, e)
+	tot := readAtMost(in, e)
 	if tot > 0 {
 		msg.WriteByte(' ')
 		msg.Write(e[:tot])
