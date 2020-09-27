@@ -16,6 +16,7 @@ Listens for start requests on log `xx`.
 {
   src: "requester",
   exe: "path to executable",
+  dir: "start directory",
   args: ["arguments","to","exe"],	
   sec: "10"
 }

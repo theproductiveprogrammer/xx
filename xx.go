@@ -47,6 +47,7 @@ type StartMsg struct {
 	Src  string   `json:"src"`
 	Exe  string   `json:"exe"`
 	Args []string `json:"args"`
+  Dir string `json:"dir"`
 	Log  string   `json:"log"`
 	Sec  int      `json:"sec"`
 }
@@ -227,6 +228,9 @@ func start(start StartMsg, setStatus chan sendStatus) {
 	cmd := exec.Command(start.Exe, start.Args...)
 	cmd.Stdout = &op
 	cmd.Stderr = &op
+  if len(start.Dir) > 0 {
+    cmd.Dir = start.Dir
+  }
 	err := cmd.Run()
 
 	exit := cmd.ProcessState.ExitCode()
