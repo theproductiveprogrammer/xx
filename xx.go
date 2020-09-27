@@ -63,7 +63,8 @@ type sendStatus struct {
 }
 
 /*    way/
- * start the go routine to log status updates,
+ * start the go routine to put status updates, handle
+ * processing messages, and get kaf messages to process.
  */
 func run(kaddr string) error {
 	var pending []StartMsg
@@ -72,7 +73,7 @@ func run(kaddr string) error {
 	go putKafMsgs(kaddr, c)
 
 	processor := func(num uint32, msg []byte, err error) {
-		pending, err = processMsgs(num, msg, err, pending)
+		pending, err = processMsg(num, msg, err, pending)
 		if err != nil {
 			log.Println(err)
 		}
@@ -107,9 +108,9 @@ func schedule(err error, end bool) time.Duration {
 }
 
 /*    way/
- * Update the pending list with our message
+ * Update the pending list with the message
  */
-func processMsgs(num uint32, msg []byte, err error, pending []StartMsg) ([]StartMsg, error) {
+func processMsg(num uint32, msg []byte, err error, pending []StartMsg) ([]StartMsg, error) {
 	if err != nil {
 		return nil, err
 	}
@@ -171,6 +172,7 @@ func isStatusReq(msg []byte) bool {
 	return bytes.Contains(msg, []byte(`"ref":`))
 }
 
+/* TODO */
 func handle(setStatus chan sendStatus, pending []StartMsg) {
 	fmt.Println(pending)
 	for i := 0; i < len(pending); i++ {
@@ -187,6 +189,9 @@ func handle(setStatus chan sendStatus, pending []StartMsg) {
 	}
 }
 
+/*    way/
+ * post status requests to kaf to save them
+ */
 func putKafMsgs(kaddr string, c chan sendStatus) {
 	if kaddr[len(kaddr)-1] != '/' {
 		kaddr = kaddr + "/"
