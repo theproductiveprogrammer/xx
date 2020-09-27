@@ -55,8 +55,7 @@ type StatusMsg struct {
 	When string `json:"when"`
 	Ref  uint32 `json:"ref"`
 	Exit int    `json:"exit"`
-	Out  string `json:"out"`
-	Err  string `json:"err"`
+  Op   string `json:"op"`
 }
 
 type sendStatus struct {
@@ -183,123 +182,75 @@ func handle(setStatus chan sendStatus, pending []StartMsg) {
 	}
 }
 
+type Op struct {
+  used int
+  buf []byte
+}
+
+/*    way/
+ * write into a the Output buffer, rotating it around
+ * as needed to keep the last few entries
+ */
+func (o *Op)Write(p []byte) (int,error) {
+  n := len(p)
+
+  if n >= len(o.buf) {
+    copy(o.buf, p[(n - len(o.buf)):])
+    o.used = len(o.buf)
+    return len(p),nil
+  }
+
+  if n + o.used <= len(o.buf) {
+    copy(o.buf[o.used:], p)
+    o.used += n
+    return len(p),nil
+  }
+
+  shift := n + o.used - len(o.buf)
+  copy(o.buf, o.buf[shift:])
+  o.used -= shift
+  copy(o.buf[o.used:], p)
+  o.used += n
+
+  return len(p),nil
+}
+
 /*    way/
  * Start the given process and capture it's output,
  * sending the status ever 'sec' seconds and on exit
  */
 func start(start StartMsg, setStatus chan sendStatus) {
+  log.Println(fmt.Sprintf(`starting: "%s" [%d]`, start.Exe, start.num))
 
-  log.Println(fmt.Sprintf(`starting: "%s"`, start.Exe))
-
-  limitSize := func(status *StatusMsg) {
-    const max = 900
-    lo := len(status.Out)
-    le := len(status.Err)
-    t := lo + le
-    if t < max {
-      return
-    }
-    so := (max * lo) / t
-    se := (max * le) / t
-    if so > 0 {
-      status.Out = status.Out[:so]
-    }
-    if se > 0 {
-      status.Err = status.Err[:se]
-    }
-  }
-
-  fmt.Println(11)
-
-  send := func(status *StatusMsg) {
-    var res chan error
-    limitSize(status)
-    fmt.Println("rm sending", status)
-    setStatus <- sendStatus{status, res}
-    err := <-res
-    if err != nil {
-      log.Println(err)
-    }
-  }
-  fmt.Println(22)
-
-  sendErr := func(err error) {
-    send(&StatusMsg{
-      When: time.Now().UTC().Format(time.RFC3339),
-      Ref: start.num,
-      Exit: -1,
-      Err: err.Error(),
-    })
-    log.Println(err)
-  }
+  op := Op{ buf: make([]byte, 900) }
 
   cmd := exec.Command(start.Exe, start.Args...)
+  cmd.Stdout = &op
+  cmd.Stderr = &op
+  err := cmd.Run()
 
-  stderr, err := cmd.StderrPipe()
+  exit := cmd.ProcessState.ExitCode()
   if err != nil {
-    sendErr(err)
-    return
+    op.Write([]byte(err.Error()))
+    exit = -1
   }
-  stdout, err := cmd.StdoutPipe()
+
+  status := StatusMsg{
+    When: time.Now().UTC().Format(time.RFC3339),
+    Ref: start.num,
+    Exit: exit,
+    Op: string(op.buf[:op.used]),
+  }
+
+  var res chan error
+  setStatus <- sendStatus{&status, res}
+  err = <-res
   if err != nil {
-    sendErr(err)
-    return
+    log.Println(err)
+  } else {
+    log.Println(fmt.Sprintf(`done: "%s" [%d]`, start.Exe, start.num))
   }
 
-  var xit chan error
-  go func() {
-    sec := time.Duration(start.Sec)
-    if sec < 1 {
-      sec = 60 * 60 * 24 * 365
-    }
-    ticker := time.NewTicker(sec * time.Second)
-    defer ticker.Stop()
-
-    var o, e string
-    out := make([]byte, 1024)
-    err := make([]byte, 1024)
-
-    for {
-      select {
-      case <-xit:
-        osz := readAtMost(stdout, out)
-        esz := readAtMost(stderr, err)
-        o = string(out[:osz])
-        e = string(err[:esz])
-        send(&StatusMsg{
-          When: time.Now().UTC().Format(time.RFC3339),
-          Ref: start.num,
-          Exit: cmd.ProcessState.ExitCode(),
-          Out: o,
-          Err: e,
-        })
-      case <-ticker.C:
-        osz := readAtMost(stdout, out)
-        esz := readAtMost(stderr, err)
-        o = string(out[:osz])
-        e = string(err[:esz])
-        send(&StatusMsg{
-          When: time.Now().UTC().Format(time.RFC3339),
-          Ref: start.num,
-          Out: o,
-          Err: e,
-        })
-      }
-    }
-  }()
-
-  fmt.Println(33)
-
-  if err := cmd.Start(); err != nil {
-  fmt.Println(38)
-    xit <- err
-    return
-  }
-  fmt.Println(34)
-  xit <- cmd.Wait()
-  fmt.Println(35)
-
-  fmt.Println("rm Proc exting..")
 }
 
 /*    way/
@@ -316,15 +267,14 @@ func putKafMsgs(kaddr string, c chan sendStatus) {
 
 	for {
 		req := <-c
-		_, err := json.Marshal(req.msg)
+		data, err := json.Marshal(req.msg)
 		if err != nil {
 			req.res <- err
 			continue
 		}
-    /*
 		_, err = http.Post(kaddr,
 			"application/json",
-			bytes.NewReader(data))*/
+			bytes.NewReader(data))
 		req.res <- err
 	}
 
