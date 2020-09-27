@@ -47,10 +47,9 @@ type StartMsg struct {
 	num  uint32
 	Src  string   `json:"src"`
 	Exe  string   `json:"exe"`
-	Args []string `json:"args"`
 	Dir  string   `json:"dir"`
-	Log  string   `json:"log"`
-	Sec  int      `json:"sec"`
+	Args []string `json:"args"`
+	Secs int      `json:"secs"`
 }
 
 type StatusMsg struct {
@@ -247,6 +246,36 @@ func start(start StartMsg, setStatus chan sendStatus) {
 	if len(start.Dir) > 0 {
 		cmd.Dir = start.Dir
 	}
+
+  var xit chan bool
+  if start.Secs > 0 {
+    xit = make(chan bool)
+    go func() {
+      s := time.Duration(start.Secs)
+      ticker := time.NewTicker(s * time.Second)
+      for {
+        select {
+        case <-xit: return
+        case <-ticker.C:
+          out := op.String()
+          if len(out) > 0 {
+            status := StatusMsg{
+              When: time.Now().UTC().Format(time.RFC3339),
+              Ref: start.num,
+              Op: out,
+            }
+            res := make(chan error)
+            setStatus <- sendStatus{&status, res}
+            err := <-res
+            if err != nil {
+              log.Println(err)
+            }
+          }
+        }
+      }
+    }()
+  }
+
 	err := cmd.Run()
 
 	exit := cmd.ProcessState.ExitCode()
@@ -261,6 +290,10 @@ func start(start StartMsg, setStatus chan sendStatus) {
 		Exit: exit,
 		Op:   op.String(),
 	}
+
+  if xit != nil {
+    xit <- true
+  }
 
 	res := make(chan error)
 	setStatus <- sendStatus{&status, res}
