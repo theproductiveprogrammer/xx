@@ -58,12 +58,12 @@ type StatusMsg struct {
 }
 
 type sendStatus struct {
-  msg *StatusMsg
-  res chan error
+	msg *StatusMsg
+	res chan error
 }
 
 /*    way/
- * start the go routine to log status updates, 
+ * start the go routine to log status updates,
  */
 func run(kaddr string) error {
 	var pending []StartMsg
@@ -175,15 +175,15 @@ func handle(setStatus chan sendStatus, pending []StartMsg) {
 	fmt.Println(pending)
 	for i := 0; i < len(pending); i++ {
 		curr := pending[i]
-    var res chan error
+		var res chan error
 		status := StatusMsg{
 			Ref: curr.num,
 		}
-		setStatus <- sendStatus { &status, res }
-    err := <-res
-    if err != nil {
-      log.Println(err)
-    }
+		setStatus <- sendStatus{&status, res}
+		err := <-res
+		if err != nil {
+			log.Println(err)
+		}
 	}
 }
 
@@ -200,15 +200,15 @@ func putKafMsgs(kaddr string, c chan sendStatus) {
 		req := <-c
 		data, err := json.Marshal(req.msg)
 		if err != nil {
-      req.res <- err
-      continue
+			req.res <- err
+			continue
 		}
 		log.Println("Sending message:", string(data))
-    /*
-		_, err = http.Post(kaddr,
-			"application/json",
-			bytes.NewReader(data))*/
-    req.res <- err
+		/*
+			_, err = http.Post(kaddr,
+				"application/json",
+				bytes.NewReader(data))*/
+		req.res <- err
 	}
 
 }
