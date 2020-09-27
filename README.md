@@ -28,6 +28,7 @@ And adds status:
 {
   when: <ISO-Format>,
   ref: "msg id",
+  pid: "process pid when running",
   exit: "code",
   op: "output"
 }
