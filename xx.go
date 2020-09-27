@@ -19,7 +19,7 @@ import (
 /*    understand/
  * program version
  */
-const VERSION = "0.1.0"
+const VERSION = "1.0.0"
 
 func main() {
 	if len(os.Args) != 2 {
