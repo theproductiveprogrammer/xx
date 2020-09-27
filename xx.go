@@ -1,7 +1,6 @@
 package main
 
 import (
-  "sync"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -13,6 +12,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -185,7 +185,7 @@ func handle(setStatus chan sendStatus, pending []StartMsg) {
 }
 
 type Op struct {
-  mux sync.Mutex
+	mux  sync.Mutex
 	used int
 	buf  []byte
 }
@@ -195,8 +195,8 @@ type Op struct {
  * as needed to keep the last few entries
  */
 func (o *Op) Write(p []byte) (int, error) {
-  o.mux.Lock()
-  defer o.mux.Unlock()
+	o.mux.Lock()
+	defer o.mux.Unlock()
 
 	n := len(p)
 
@@ -225,11 +225,11 @@ func (o *Op) Write(p []byte) (int, error) {
  * empty the current buffer into a string
  */
 func (o *Op) String() string {
-  o.mux.Lock()
-  defer o.mux.Unlock()
-  r := string(o.buf[:o.used])
-  o.used = 0
-  return r
+	o.mux.Lock()
+	defer o.mux.Unlock()
+	r := string(o.buf[:o.used])
+	o.used = 0
+	return r
 }
 
 /*    way/
