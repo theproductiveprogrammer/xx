@@ -55,7 +55,7 @@ type StartMsg struct {
 type StatusMsg struct {
 	When string `json:"when"`
 	Ref  uint32 `json:"ref"`
-  Pid  int    `json:"pid"`
+	Pid  int    `json:"pid"`
 	Exit int    `json:"exit"`
 	Op   string `json:"op"`
 }
@@ -264,7 +264,7 @@ func start(start StartMsg, setStatus chan sendStatus) {
 						status := StatusMsg{
 							When: time.Now().UTC().Format(time.RFC3339),
 							Ref:  start.num,
-              Pid: cmd.Process.Pid,
+							Pid:  cmd.Process.Pid,
 							Op:   out,
 						}
 						res := make(chan error)
