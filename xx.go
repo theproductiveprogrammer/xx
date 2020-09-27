@@ -116,7 +116,7 @@ func processMsg(num uint32, msg []byte, err error, pending []StartMsg) ([]StartM
 	}
 
 	mErr := func(err error) ([]StartMsg, error) {
-		m := fmt.Sprintf("failed msg: %d (%s %s)",
+		m := fmt.Sprintf(`failed msg: %d ("%s" %s)`,
 			num, string(msg), err.Error())
 		return nil, errors.New(m)
 	}
