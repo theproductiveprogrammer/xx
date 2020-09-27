@@ -47,7 +47,7 @@ type StartMsg struct {
 	Src  string   `json:"src"`
 	Exe  string   `json:"exe"`
 	Args []string `json:"args"`
-  Dir string `json:"dir"`
+	Dir  string   `json:"dir"`
 	Log  string   `json:"log"`
 	Sec  int      `json:"sec"`
 }
@@ -228,9 +228,9 @@ func start(start StartMsg, setStatus chan sendStatus) {
 	cmd := exec.Command(start.Exe, start.Args...)
 	cmd.Stdout = &op
 	cmd.Stderr = &op
-  if len(start.Dir) > 0 {
-    cmd.Dir = start.Dir
-  }
+	if len(start.Dir) > 0 {
+		cmd.Dir = start.Dir
+	}
 	err := cmd.Run()
 
 	exit := cmd.ProcessState.ExitCode()
@@ -246,16 +246,16 @@ func start(start StartMsg, setStatus chan sendStatus) {
 		Op:   string(op.buf[:op.used]),
 	}
 
-  res := make(chan error)
+	res := make(chan error)
 	setStatus <- sendStatus{&status, res}
 	err = <-res
 	if err != nil {
 		log.Println(err)
 	} else {
-    m := "done"
-    if exit != 0 {
-      m = fmt.Sprintf(`exited with code %d`, exit)
-    }
+		m := "done"
+		if exit != 0 {
+			m = fmt.Sprintf(`exited with code %d`, exit)
+		}
 		log.Println(fmt.Sprintf(`%s: "%s" [%d]`, m, start.Exe, start.num))
 	}
 
