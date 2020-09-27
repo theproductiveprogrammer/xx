@@ -246,13 +246,17 @@ func start(start StartMsg, setStatus chan sendStatus) {
 		Op:   string(op.buf[:op.used]),
 	}
 
-	var res chan error
+  res := make(chan error)
 	setStatus <- sendStatus{&status, res}
 	err = <-res
 	if err != nil {
 		log.Println(err)
 	} else {
-		log.Println(fmt.Sprintf(`done: "%s" [%d]`, start.Exe, start.num))
+    m := "done"
+    if exit != 0 {
+      m = fmt.Sprintf(`exited with code %d`, exit)
+    }
+		log.Println(fmt.Sprintf(`%s: "%s" [%d]`, m, start.Exe, start.num))
 	}
 
 }
