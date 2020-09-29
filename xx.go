@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -60,9 +61,18 @@ type StatusMsg struct {
 	Op   string `json:"op"`
 }
 
+type StopMsg struct {
+	Stop uint32 `json:"stop"`
+}
+
 type sendStatus struct {
 	msg *StatusMsg
 	res chan error
+}
+
+type Action struct {
+	startReq *StartMsg
+	stopReq  *StopMsg
 }
 
 /*    way/
@@ -70,7 +80,7 @@ type sendStatus struct {
  * processing messages, and get kaf messages to process.
  */
 func run(kaddr string) error {
-	var pending []StartMsg
+	var pending []Action
 
 	c := make(chan sendStatus)
 	go putKafMsgs(kaddr, c)
@@ -85,7 +95,7 @@ func run(kaddr string) error {
 	scheduler := func(err error, end bool) time.Duration {
 		if end && len(pending) > 0 {
 			handle(c, pending)
-			pending = []StartMsg{}
+			pending = []Action{}
 		}
 		return schedule(err, end)
 	}
@@ -113,12 +123,12 @@ func schedule(err error, end bool) time.Duration {
 /*    way/
  * Update the pending list with the message
  */
-func processMsg(num uint32, msg []byte, err error, pending []StartMsg) ([]StartMsg, error) {
+func processMsg(num uint32, msg []byte, err error, pending []Action) ([]Action, error) {
 	if err != nil {
 		return nil, err
 	}
 
-	mErr := func(err error) ([]StartMsg, error) {
+	mErr := func(err error) ([]Action, error) {
 		m := fmt.Sprintf(`failed msg: %d ("%s" %s)`,
 			num, string(msg), err.Error())
 		return nil, errors.New(m)
@@ -126,19 +136,32 @@ func processMsg(num uint32, msg []byte, err error, pending []StartMsg) ([]StartM
 
 	if isStartReq(msg) {
 
-		var start StartMsg
-		err := json.Unmarshal(msg, &start)
+		var req StartMsg
+		err := json.Unmarshal(msg, &req)
 		if err != nil {
 			return mErr(err)
 		} else {
-			start.num = num
-			pending = append(pending, start)
+			req.num = num
+			pending = append(pending, Action{&req, nil})
 			return pending, nil
 		}
 
 	}
 
-	if isStatusReq(msg) {
+	if isStopReq(msg) {
+
+		var req StopMsg
+		err := json.Unmarshal(msg, &req)
+		if err != nil {
+			return mErr(err)
+		} else {
+			pending = append(pending, Action{nil, &req})
+			return pending, nil
+		}
+
+	}
+
+	if isStatusUpdate(msg) {
 
 		var status StatusMsg
 		err := json.Unmarshal(msg, &status)
@@ -147,9 +170,11 @@ func processMsg(num uint32, msg []byte, err error, pending []StartMsg) ([]StartM
 		} else {
 			for i := 0; i < len(pending); i++ {
 				curr := pending[i]
-				if curr.num == status.Ref {
-					pending[i] = pending[len(pending)-1]
-					pending = pending[:len(pending)-1]
+				if curr.startReq != nil {
+					if curr.startReq.num == status.Ref {
+						pending[i] = pending[len(pending)-1]
+						pending = pending[:len(pending)-1]
+					}
 				}
 			}
 			return pending, nil
@@ -168,20 +193,85 @@ func isStartReq(msg []byte) bool {
 }
 
 /*    way/
- * Guess that this is a start request when it contains
+ * Guess that this is a status update when it contains
  * a "ref" field
  */
-func isStatusReq(msg []byte) bool {
+func isStatusUpdate(msg []byte) bool {
 	return bytes.Contains(msg, []byte(`"ref":`))
 }
 
 /*    way/
+ * Guess that this is a stop request when it contains
+ * a "stop" field
+ */
+func isStopReq(msg []byte) bool {
+	return bytes.Contains(msg, []byte(`"stop":`))
+}
+
+/*    understand/
+ * keep track of all procs so we can stop them
+ */
+var PROCS = Procs{}
+
+/*    way/
  * start a goroutine for each pending request
  */
-func handle(setStatus chan sendStatus, pending []StartMsg) {
+func handle(setStatus chan sendStatus, pending []Action) {
 	for i := 0; i < len(pending); i++ {
-		go start(pending[i], setStatus)
+		curr := pending[i]
+		if curr.startReq != nil {
+			go start(pending[i].startReq, setStatus)
+		} else {
+			PROCS.Del(curr.stopReq.Stop)
+		}
 	}
+}
+
+type Procs struct {
+	mux sync.Mutex
+	pi  []ProcInfo
+}
+
+type ProcInfo struct {
+	num uint32
+	cmd *exec.Cmd
+}
+
+func (procs *Procs) Add(pi ProcInfo) {
+	procs.mux.Lock()
+	defer procs.mux.Unlock()
+	procs.pi = append(procs.pi, pi)
+}
+
+func (procs *Procs) Del(num uint32) {
+	procs.mux.Lock()
+	defer procs.mux.Unlock()
+	for i := 0; i < len(procs.pi); i++ {
+		if num == procs.pi[i].num {
+			procs.pi[i].Kill()
+			procs.pi[i] = procs.pi[len(procs.pi)-1]
+			procs.pi = procs.pi[:len(procs.pi)-1]
+		}
+	}
+}
+
+/*    way/
+ * throw everything we have at the process and try to kill it
+ */
+func (pi *ProcInfo) Kill() {
+	if pi.cmd.ProcessState != nil && pi.cmd.ProcessState.Exited() {
+		return
+	}
+	if pi.cmd.Process == nil {
+		return
+	}
+	syscall.Kill(-pi.cmd.Process.Pid, syscall.SIGTERM)
+	syscall.Kill(pi.cmd.Process.Pid, syscall.SIGTERM)
+	time.Sleep(2 * time.Second)
+	syscall.Kill(-pi.cmd.Process.Pid, syscall.SIGKILL)
+	syscall.Kill(pi.cmd.Process.Pid, syscall.SIGKILL)
+	pi.cmd.Process.Kill()
+	pi.cmd.Process.Release()
 }
 
 type Op struct {
@@ -236,7 +326,7 @@ func (o *Op) String() string {
  * Start the given process and capture it's output,
  * sending the status ever 'sec' seconds and on exit
  */
-func start(start StartMsg, setStatus chan sendStatus) {
+func start(start *StartMsg, setStatus chan sendStatus) {
 	log.Println(fmt.Sprintf(`starting: "%s" [%d]`, start.Exe, start.num))
 
 	op := Op{buf: make([]byte, 900)}
@@ -279,7 +369,10 @@ func start(start StartMsg, setStatus chan sendStatus) {
 		}()
 	}
 
+	PROCS.Add(ProcInfo{start.num, cmd})
 	err := cmd.Run()
+
+	PROCS.Del(start.num)
 
 	exit := cmd.ProcessState.ExitCode()
 	if err != nil {
