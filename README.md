@@ -12,7 +12,7 @@ $> xx <kaf addr>  # start
 
 Listens for start requests on log `xx`.
 
-```json
+```json5
 {
   src: "requester",
   exe: "path to executable",
@@ -24,13 +24,21 @@ Listens for start requests on log `xx`.
 
 And adds status:
 
-```json
+```json5
 {
   when: <ISO-Format>,
   ref: "msg id",
   pid: "process pid when running",
   exit: "code",
   op: "output"
+}
+```
+
+Handles stop requests as well:
+
+```json5
+{
+  stop: "msg id"
 }
 ```
 
